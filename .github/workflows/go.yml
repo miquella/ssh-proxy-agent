@@ -1,6 +1,50 @@
 name: Go
 on: [push, pull_request]
 jobs:
+  gofmt:
+    name: go fmt
+    runs-on: ubuntu-latest
+    steps:
+    - name: Check out code
+      uses: actions/checkout@v1
+
+    - name: Run linter
+      uses: miquella/go-actions/fmt@master
+
+  gosec:
+    name: gosec
+    runs-on: ubuntu-latest
+    steps:
+    - name: Check out code
+      uses: actions/checkout@v1
+
+    - name: Run linter
+      uses: miquella/go-actions/sec@master
+
+  govet:
+    name: go vet
+    runs-on: ubuntu-latest
+    steps:
+    - name: Check out code
+      uses: actions/checkout@v1
+
+    - name: Run shadow linter
+      uses: miquella/go-actions/vet@master
+      with:
+        vettool: shadow
+    - name: Run vet linter
+      uses: miquella/go-actions/vet@master
+
+  errcheck:
+    name: errcheck
+    runs-on: ubuntu-latest
+    steps:
+    - name: Check out code
+      uses: actions/checkout@v1
+
+    - name: Run errcheck linter
+      uses: miquella/go-actions/errcheck@master
+
   test:
     name: Test
     strategy:
@@ -21,5 +65,5 @@ jobs:
     - name: Get dependencies
       run: go get -v -t -d ./...
 
-    - name: Build
-      run: go build -v ./...
+    - name: Test
+      run: go test -v ./...
