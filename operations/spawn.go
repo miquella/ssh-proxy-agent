@@ -24,7 +24,7 @@ type Spawn struct {
 	Command         []string
 	GenerateKey     bool
 	NoProxy         bool
-	Username        string
+	ValidPrincipals string
 	VaultSigningUrl string
 }
 
@@ -96,7 +96,7 @@ func (s *Spawn) startProxyKeyring() (*ProxyAgent, error) {
 	if !s.NoProxy {
 		upstream_auth_sock = os.Getenv("SSH_AUTH_SOCK")
 	}
-	keyring, err := proxyagent.NewProxyKeyring(upstream_auth_sock, s.VaultSigningUrl, s.Username)
+	keyring, err := proxyagent.NewProxyKeyring(upstream_auth_sock, s.VaultSigningUrl, s.ValidPrincipals)
 	if err != nil {
 		return nil, err
 	}
