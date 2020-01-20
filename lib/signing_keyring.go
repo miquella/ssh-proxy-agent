@@ -18,10 +18,11 @@ import (
 )
 
 type signedKey struct {
-	comment   string
-	expire    *time.Time
-	signedKey ssh.PublicKey
-	signer    ssh.Signer
+	comment         string
+	expire          *time.Time
+	signedPublicKey ssh.PublicKey
+	signedUntil     time.Time
+	signer          ssh.Signer
 }
 
 type signingKeyring struct {
@@ -29,6 +30,7 @@ type signingKeyring struct {
 	locked           bool
 	mu               sync.RWMutex
 	passphrase       []byte
+	renewalTimer     *time.Timer
 	username         string
 	vaultClient      *vault.Client
 	vaultSigningPath string
@@ -47,18 +49,25 @@ func NewSigningKeyring(vaultSigningUrl string, username string) (agent.ExtendedA
 		return nil, err
 	}
 
-	return &signingKeyring{
+	signingKeyring := &signingKeyring{
+		renewalTimer:     time.NewTimer(time.Hour),
 		username:         username,
 		vaultClient:      vc,
 		vaultSigningPath: path,
-	}, nil
+	}
+
+	signingKeyring.renewalTimer.Stop() // stop the timer until we have keys
+	go handleRenewalTimer(signingKeyring)
+
+	return signingKeyring, nil
 }
 
 // expireKeysLocked removes expired keys from the keyring. If a key was added
 // with a lifetimesecs contraint and seconds >= lifetimesecs seconds have
 // ellapsed, it is removed. The caller *must* be holding the keyring mutex.
 func (k *signingKeyring) expireKeysLocked() {
-	// TODO: handle Vault-signed key expiration / renewal
+	// TODO: consider moving this to use a separate timer channel to handle removal to avoid
+	// locking overhead
 	for _, key := range k.keys {
 		if key.expire != nil && time.Now().After(*key.expire) {
 			k.removeLocked(key.signer.PublicKey().Marshal())
@@ -72,7 +81,15 @@ func (k *signingKeyring) removeLocked(want []byte) error {
 	for i := 0; i < len(k.keys); {
 		if bytes.Equal(k.keys[i].signer.PublicKey().Marshal(), want) {
 			k.keys = append(k.keys[:i], k.keys[i+1:]...)
+
+			if len(k.keys) == 0 {
+				k.renewalTimer.Stop()
+			} else {
+				k.resetRenewalTimer()
+			}
+
 			return nil
+			// TODO: do we need to look through all for duplicates?
 		} else {
 			i++
 		}
@@ -95,9 +112,9 @@ func (k *signingKeyring) List() ([]*agent.Key, error) {
 	var ids []*agent.Key
 	for _, key := range k.keys {
 		ids = append(ids, &agent.Key{
-			Blob:    key.signedKey.Marshal(),
+			Blob:    key.signedPublicKey.Marshal(),
 			Comment: key.comment,
-			Format:  key.signedKey.Type(),
+			Format:  key.signedPublicKey.Type(),
 		})
 	}
 	return ids, nil
@@ -107,6 +124,7 @@ func (k *signingKeyring) List() ([]*agent.Key, error) {
 // is given, that certificate is added as public key. Note that
 // any constraints given are ignored.
 func (k *signingKeyring) Add(key agent.AddedKey) error {
+	// TODO: look at making these locks more precise (lock isn't needed until end, RLock earlier?)
 	k.mu.Lock()
 	defer k.mu.Unlock()
 
@@ -120,34 +138,27 @@ func (k *signingKeyring) Add(key agent.AddedKey) error {
 	}
 
 	pubKey := signer.PublicKey()
-	id := &agent.Key{
-		Blob:    pubKey.Marshal(),
-		Comment: key.Comment,
-		Format:  pubKey.Type(),
-	}
-
-	signedKeyString, err := k.SignKeyWithVault(id.String())
+	// TODO: rlock early, unlock during signing, write lock during replace?
+	// or are we comfortable leaving this locked for the full duration of a single add?
+	signedPublicKey, expiresAt, err := k.signPublicKeyWithVault(pubKey, key.Comment)
 	if err != nil {
 		return err
 	}
 
-	signedPublicKey, _, _, _, err := ssh.ParseAuthorizedKey([]byte(signedKeyString))
-	if err != nil {
-		return err
-	}
-
-	signedKey := signedKey{
-		comment:   key.Comment,
-		signedKey: signedPublicKey,
-		signer:    signer,
+	keyToAdd := &signedKey{
+		comment:         key.Comment,
+		signedPublicKey: signedPublicKey,
+		signedUntil:     expiresAt,
+		signer:          signer,
 	}
 
 	if key.LifetimeSecs > 0 {
 		t := time.Now().Add(time.Duration(key.LifetimeSecs) * time.Second)
-		signedKey.expire = &t
+		keyToAdd.expire = &t
 	}
 
-	k.keys = append(k.keys, signedKey)
+	k.keys = append(k.keys, *keyToAdd)
+	k.resetRenewalTimer()
 	return nil
 }
 
@@ -173,6 +184,7 @@ func (k *signingKeyring) RemoveAll() error {
 	}
 
 	k.keys = nil
+	k.renewalTimer.Stop()
 	return nil
 }
 
@@ -187,6 +199,8 @@ func (k *signingKeyring) Lock(passphrase []byte) error {
 
 	k.locked = true
 	k.passphrase = passphrase
+	k.renewalTimer.Stop()
+
 	return nil
 }
 
@@ -202,6 +216,11 @@ func (k *signingKeyring) Unlock(passphrase []byte) error {
 	if 1 != subtle.ConstantTimeCompare(passphrase, k.passphrase) {
 		return fmt.Errorf("agent: incorrect passphrase")
 	}
+
+	// we do not resign keys when locked, so we need to ensure we resign before we unlock
+	keysToRenew := k.getKeysToRenew() // keysToRenew requires at least a read lock
+	signedKeys := k.resignKeys(keysToRenew)
+	k.updateKeys(signedKeys) // updateKeys requires a write lock
 
 	k.locked = false
 	k.passphrase = nil
@@ -224,7 +243,7 @@ func (k *signingKeyring) SignWithFlags(pubkey ssh.PublicKey, data []byte, flags 
 	k.expireKeysLocked()
 	wanted := pubkey.Marshal()
 	for _, key := range k.keys {
-		if bytes.Equal(key.signedKey.Marshal(), wanted) {
+		if bytes.Equal(key.signedPublicKey.Marshal(), wanted) {
 			if flags == 0 {
 				return key.signer.Sign(rand.Reader, data)
 			} else {
@@ -265,24 +284,38 @@ func (k *signingKeyring) Signers() ([]ssh.Signer, error) {
 	return s, nil
 }
 
-// SignKeyWithVault signs a public key with a HashiCorp Vault path
-func (k *signingKeyring) SignKeyWithVault(pubKey string) (string, error) {
+// signPublicKeyWithVault signs a public key with a HashiCorp Vault path
+func (k *signingKeyring) signPublicKeyWithVault(pubKey ssh.PublicKey, comment string) (ssh.PublicKey, time.Time, error) {
+	pubKeyId := &agent.Key{
+		Blob:    pubKey.Marshal(),
+		Comment: comment,
+		Format:  pubKey.Type(),
+	}
+
+	ttl := time.Hour
 	args := map[string]interface{}{
-		"public_key":       string(pubKey),
-		"ttl":              (16 * time.Hour).String(), // TODO: be more decisive about this
+		"public_key":       pubKeyId.String(),
+		"ttl":              ttl.String(),
 		"valid_principals": k.username,
 	}
 	resp, err := k.vaultClient.Logical().Write(k.vaultSigningPath, args)
 	if err != nil {
-		return "", err
+		return nil, time.Time{}, err
 	}
 
 	signedCert := resp.Data["signed_key"].(string)
 	if signedCert == "" {
-		return "", fmt.Errorf("Could not get signed cert from Vault")
+		return nil, time.Time{}, fmt.Errorf("Could not get signed cert from Vault")
 	}
 
-	return signedCert, nil
+	signedPublicKey, _, _, _, err := ssh.ParseAuthorizedKey([]byte(signedCert))
+	if err != nil {
+		return nil, time.Time{}, err
+	}
+
+	// TODO: return real ttl after testing
+	//return signedPublicKey, time.Now().Add(ttl), nil
+	return signedPublicKey, time.Now().Add(time.Second * 10), nil
 }
 
 func parseVaultSigningUrl(signingUrl string) (string, string, error) {
@@ -313,4 +346,111 @@ func configureVaultClient(signingHost string) (*vault.Client, error) {
 // The keyring does not support any extensions
 func (k *signingKeyring) Extension(extensionType string, contents []byte) ([]byte, error) {
 	return nil, errors.New("agent: extensions are not supported")
+}
+
+// handleRenewalTimer runs as a goroutine to monitor the renewal channel and renew certs
+func handleRenewalTimer(keyring *signingKeyring) {
+	// TODO: implement an exit channel to avoid orphaning this routine
+	for {
+		<-keyring.renewalTimer.C
+		// do not renew anything while locked
+		if keyring.locked {
+			keyring.renewalTimer.Stop()
+			continue
+		}
+
+		keyring.renewExpiringCerts()
+		keyring.resetRenewalTimer()
+	}
+}
+
+func (k *signingKeyring) resetRenewalTimer() {
+	k.renewalTimer.Stop()
+	renewAt := time.Until(k.getNextRenewalTime())
+	k.renewalTimer.Reset(renewAt)
+}
+
+// // getNextRenewalDuration returns the duration until the next certificate is slated to expire
+func (k *signingKeyring) getNextRenewalTime() time.Time {
+	if len(k.keys) == 0 {
+		return time.Time{}
+	}
+
+	nextExpiration := k.keys[0].signedUntil
+	for _, key := range k.keys {
+		if key.signedUntil.Before(nextExpiration) {
+			nextExpiration = key.signedUntil
+		}
+	}
+
+	// ensure a 5 minute lower bound on renewal checks
+	expiresIn := time.Until(nextExpiration) - time.Minute*10
+	if expiresIn > time.Minute*5 {
+		return time.Now().Add(expiresIn)
+	}
+	return time.Now().Add(time.Minute * 5)
+}
+
+// getKeysToRenew identifies all public keys whose signing will expire in the next 20 minutes
+// this method *must* be wrapped in at least a read lock from the caller
+func (k *signingKeyring) getKeysToRenew() []signedKey {
+	// we will renew any keys that expire in the next 20 minutes
+	renewalTime := time.Now().Add(time.Minute * 20)
+
+	keysToRenew := []signedKey{}
+	for _, key := range k.keys {
+		if key.signedUntil.Before(renewalTime) {
+			keysToRenew = append(keysToRenew, key)
+		}
+	}
+
+	return keysToRenew
+}
+
+// resignKeys takes a list of signed keys and re-signs them with Hashicorp Vault
+func (k *signingKeyring) resignKeys(keysToRenew []signedKey) []signedKey {
+	for i, key := range keysToRenew {
+		signedPublicKey, expiresAt, err := k.signPublicKeyWithVault(key.signer.PublicKey(), key.comment)
+		if err != nil {
+			// TODO: log and skip if we fail to sign
+		}
+		keysToRenew[i].signedPublicKey = signedPublicKey
+		keysToRenew[i].signedUntil = expiresAt
+	}
+
+	return keysToRenew
+}
+
+// updateKeys takes a list of signed keys and updates all keys in the keychain that match
+// the public key of a given key. Given keys that do not have a match are ignored.
+// this *must* be wrapped in a write lock by the caller
+func (k *signingKeyring) updateKeys(newKeys []signedKey) {
+	for _, newKey := range newKeys {
+		for i, currentKey := range k.keys {
+			if currentKey.signer.PublicKey() == newKey.signer.PublicKey() {
+				k.keys[i].signedPublicKey = newKey.signedPublicKey
+				k.keys[i].signedUntil = newKey.signedUntil
+				break
+			}
+		}
+	}
+}
+
+// renewExpiringCerts identifies, signs, and updates all keys that will expire
+// in the next 20 minutes.
+func (k *signingKeyring) renewExpiringCerts() {
+	keysToRenew := []signedKey{}
+	func() {
+		k.mu.RLock()
+		defer k.mu.RUnlock()
+		keysToRenew = k.getKeysToRenew()
+	}()
+
+	signedKeys := k.resignKeys(keysToRenew)
+
+	func() {
+		k.mu.Lock()
+		defer k.mu.Unlock()
+		k.updateKeys(signedKeys)
+	}()
 }
