@@ -19,7 +19,7 @@ type ProxyKeyring struct {
 	listener net.Listener
 }
 
-func NewProxyKeyring(upstreamAuthSock string) (*ProxyKeyring, error) {
+func NewProxyKeyring(upstreamAuthSock string, vaultSigningUrl string, username string) (*ProxyKeyring, error) {
 	var err error
 	var conn net.Conn
 	var upstream agent.ExtendedAgent
@@ -33,10 +33,22 @@ func NewProxyKeyring(upstreamAuthSock string) (*ProxyKeyring, error) {
 		upstream = agent.NewClient(conn)
 	}
 
-	return &ProxyKeyring{
-		upstream: upstream,
-		keyring:  agent.NewKeyring().(agent.ExtendedAgent),
-	}, nil
+	if vaultSigningUrl != "" {
+		signingKeyring, err := NewSigningKeyring(vaultSigningUrl, username)
+		if err != nil {
+			return nil, err
+		}
+
+		return &ProxyKeyring{
+			upstream: upstream,
+			keyring:  signingKeyring,
+		}, nil
+	} else {
+		return &ProxyKeyring{
+			upstream: upstream,
+			keyring:  agent.NewKeyring().(agent.ExtendedAgent),
+		}, nil
+	}
 }
 
 func (pk *ProxyKeyring) Listen() (string, error) {
