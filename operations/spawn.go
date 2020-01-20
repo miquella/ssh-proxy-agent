@@ -128,7 +128,7 @@ func (s *Spawn) generateKey() (*agent.AddedKey, error) {
 
 	return &agent.AddedKey{
 		PrivateKey: parsedKey,
-		Comment:    "proxy-generated-RSA-key",
+		Comment:    "ssh-proxy-agent-generated-key",
 	}, nil
 }
 
