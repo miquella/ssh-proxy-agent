@@ -26,11 +26,12 @@ type signedKey struct {
 }
 
 type signingKeyring struct {
+	expirationTimer  *time.Timer
 	keys             []signedKey
 	locked           bool
 	mu               sync.RWMutex
 	passphrase       []byte
-	renewalTimer     *time.Timer
+	signingTimer     *time.Timer
 	username         string
 	vaultClient      *vault.Client
 	vaultSigningPath string
@@ -50,14 +51,14 @@ func NewSigningKeyring(vaultSigningUrl string, username string) (agent.ExtendedA
 	}
 
 	signingKeyring := &signingKeyring{
-		renewalTimer:     time.NewTimer(time.Hour),
+		expirationTimer:  time.NewTimer(0),
+		signingTimer:     time.NewTimer(0),
 		username:         username,
 		vaultClient:      vc,
 		vaultSigningPath: path,
 	}
 
-	signingKeyring.renewalTimer.Stop() // stop the timer until we have keys
-	go handleRenewalTimer(signingKeyring)
+	go handleExpirationTimers(signingKeyring)
 
 	return signingKeyring, nil
 }
@@ -66,8 +67,6 @@ func NewSigningKeyring(vaultSigningUrl string, username string) (agent.ExtendedA
 // with a lifetimesecs contraint and seconds >= lifetimesecs seconds have
 // ellapsed, it is removed. The caller *must* be holding the keyring mutex.
 func (k *signingKeyring) expireKeysLocked() {
-	// TODO: consider moving this to use a separate timer channel to handle removal to avoid
-	// locking overhead
 	for _, key := range k.keys {
 		if key.expire != nil && time.Now().After(*key.expire) {
 			k.removeLocked(key.signer.PublicKey().Marshal())
@@ -83,9 +82,9 @@ func (k *signingKeyring) removeLocked(want []byte) error {
 			k.keys = append(k.keys[:i], k.keys[i+1:]...)
 
 			if len(k.keys) == 0 {
-				k.renewalTimer.Stop()
+				k.stopTimers()
 			} else {
-				k.resetRenewalTimer()
+				k.renewTimers()
 			}
 
 			return nil
@@ -108,7 +107,6 @@ func (k *signingKeyring) List() ([]*agent.Key, error) {
 		return nil, nil
 	}
 
-	k.expireKeysLocked()
 	var ids []*agent.Key
 	for _, key := range k.keys {
 		ids = append(ids, &agent.Key{
@@ -158,7 +156,8 @@ func (k *signingKeyring) Add(key agent.AddedKey) error {
 	}
 
 	k.keys = append(k.keys, *keyToAdd)
-	k.resetRenewalTimer()
+	k.renewTimers()
+
 	return nil
 }
 
@@ -184,7 +183,8 @@ func (k *signingKeyring) RemoveAll() error {
 	}
 
 	k.keys = nil
-	k.renewalTimer.Stop()
+	k.stopTimers()
+
 	return nil
 }
 
@@ -199,7 +199,7 @@ func (k *signingKeyring) Lock(passphrase []byte) error {
 
 	k.locked = true
 	k.passphrase = passphrase
-	k.renewalTimer.Stop()
+	k.stopTimers()
 
 	return nil
 }
@@ -217,10 +217,16 @@ func (k *signingKeyring) Unlock(passphrase []byte) error {
 		return fmt.Errorf("agent: incorrect passphrase")
 	}
 
+	// remove any keys that expired during the lock
+	k.expireKeysLocked()
+
 	// we do not resign keys when locked, so we need to ensure we resign before we unlock
-	keysToRenew := k.getKeysToRenew() // keysToRenew requires at least a read lock
+	keysToRenew := k.getKeysToRenew()
 	signedKeys := k.resignKeys(keysToRenew)
-	k.updateKeys(signedKeys) // updateKeys requires a write lock
+	k.updateKeys(signedKeys)
+
+	// enable the timers
+	k.renewTimers()
 
 	k.locked = false
 	k.passphrase = nil
@@ -240,7 +246,6 @@ func (k *signingKeyring) SignWithFlags(pubkey ssh.PublicKey, data []byte, flags 
 		return nil, errLocked
 	}
 
-	k.expireKeysLocked()
 	wanted := pubkey.Marshal()
 	for _, key := range k.keys {
 		if bytes.Equal(key.signedPublicKey.Marshal(), wanted) {
@@ -276,7 +281,6 @@ func (k *signingKeyring) Signers() ([]ssh.Signer, error) {
 		return nil, errLocked
 	}
 
-	k.expireKeysLocked()
 	s := make([]ssh.Signer, 0, len(k.keys))
 	for _, key := range k.keys {
 		s = append(s, key.signer)
@@ -313,9 +317,7 @@ func (k *signingKeyring) signPublicKeyWithVault(pubKey ssh.PublicKey, comment st
 		return nil, time.Time{}, err
 	}
 
-	// TODO: return real ttl after testing
-	//return signedPublicKey, time.Now().Add(ttl), nil
-	return signedPublicKey, time.Now().Add(time.Second * 10), nil
+	return signedPublicKey, time.Now().Add(ttl), nil
 }
 
 func parseVaultSigningUrl(signingUrl string) (string, string, error) {
@@ -348,47 +350,91 @@ func (k *signingKeyring) Extension(extensionType string, contents []byte) ([]byt
 	return nil, errors.New("agent: extensions are not supported")
 }
 
-// handleRenewalTimer runs as a goroutine to monitor the renewal channel and renew certs
-func handleRenewalTimer(keyring *signingKeyring) {
+// handleRenewalTimer runs as a goroutine to monitor the channels related to key expiration
+// and removal and signing expiration and renewal
+func handleExpirationTimers(keyring *signingKeyring) {
 	// TODO: implement an exit channel to avoid orphaning this routine
 	for {
-		<-keyring.renewalTimer.C
-		// do not renew anything while locked
-		if keyring.locked {
-			keyring.renewalTimer.Stop()
-			continue
+		// stop timers if there are no keys or the keyring is locked
+		if keyring.locked || len(keyring.keys) == 0 {
+			keyring.stopTimers()
 		}
 
-		keyring.renewExpiringCerts()
-		keyring.resetRenewalTimer()
+		select {
+		case <-keyring.expirationTimer.C:
+			func() {
+				keyring.mu.Lock()
+				defer keyring.mu.Unlock()
+
+				// remove all expired keys
+				keyring.expireKeysLocked()
+			}()
+
+			func() {
+				keyring.mu.RLock()
+				defer keyring.mu.RUnlock()
+
+				keyring.renewTimers()
+			}()
+		case <-keyring.signingTimer.C:
+			// renew all expired signatures (the mutex is handled internally)
+			keyring.renewExpiringCerts()
+
+			func() {
+				keyring.mu.RLock()
+				defer keyring.mu.RUnlock()
+
+				keyring.renewTimers()
+			}()
+		}
 	}
 }
 
-func (k *signingKeyring) resetRenewalTimer() {
-	k.renewalTimer.Stop()
-	renewAt := time.Until(k.getNextRenewalTime())
-	k.renewalTimer.Reset(renewAt)
+// stops all timers in the keyring
+func (k *signingKeyring) stopTimers() {
+	k.expirationTimer.Stop()
+	k.signingTimer.Stop()
 }
 
-// // getNextRenewalDuration returns the duration until the next certificate is slated to expire
-func (k *signingKeyring) getNextRenewalTime() time.Time {
+// resetExpirationTimer resets the timer to the next expiring key
+// the caller *must* hold at least the read lock
+func (k *signingKeyring) renewTimers() {
+	k.stopTimers()
+
 	if len(k.keys) == 0 {
-		return time.Time{}
+		return
 	}
 
-	nextExpiration := k.keys[0].signedUntil
+	var nextKeyExpiration time.Time // it's possible for there to be no key expiration
+	nextSigningExpiration := k.keys[0].signedUntil
+
 	for _, key := range k.keys {
-		if key.signedUntil.Before(nextExpiration) {
-			nextExpiration = key.signedUntil
+		// get soonest key expiration
+		if key.expire != nil && (nextKeyExpiration.IsZero() || (key.expire).Before(nextKeyExpiration)) {
+			nextKeyExpiration = *key.expire
+		}
+
+		// get soonest signing expiration
+		if key.signedUntil.Before(nextSigningExpiration) {
+			nextSigningExpiration = key.signedUntil
 		}
 	}
 
-	// ensure a 5 minute lower bound on renewal checks
-	expiresIn := time.Until(nextExpiration) - time.Minute*10
-	if expiresIn > time.Minute*5 {
-		return time.Now().Add(expiresIn)
+	// ensure a 5 minute lower bound on signing renewal checks to avoid overhead
+	// since we are using a 10 minute buffer window
+	signDuration := time.Until(nextSigningExpiration) - time.Minute*10
+	if signDuration > time.Minute*5 {
+		nextSigningExpiration = time.Now().Add(signDuration)
 	}
-	return time.Now().Add(time.Minute * 5)
+	nextSigningExpiration = time.Now().Add(time.Minute * 5)
+
+	if nextKeyExpiration.IsZero() {
+		k.expirationTimer.Stop()
+	} else {
+		k.expirationTimer.Reset(time.Until(nextKeyExpiration))
+	}
+
+	k.signingTimer.Reset(time.Until(nextSigningExpiration))
 }
 
 // getKeysToRenew identifies all public keys whose signing will expire in the next 20 minutes
@@ -443,6 +489,7 @@ func (k *signingKeyring) renewExpiringCerts() {
 	func() {
 		k.mu.RLock()
 		defer k.mu.RUnlock()
+
 		keysToRenew = k.getKeysToRenew()
 	}()
 
@@ -451,6 +498,7 @@ func (k *signingKeyring) renewExpiringCerts() {
 	func() {
 		k.mu.Lock()
 		defer k.mu.Unlock()
+
 		k.updateKeys(signedKeys)
 	}()
 }
