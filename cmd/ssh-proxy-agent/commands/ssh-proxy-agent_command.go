@@ -24,6 +24,7 @@ var username string
 func init() {
 	SSHProxyAgentCommand.Flags().BoolVarP(&interactive, "", "l", false, "spawn an interactive shell")
 
+	SSHProxyAgentCommand.Flags().BoolVar(&shell.NoProxy, "no-proxy", false, "disable forwarding to an upstream agent (default: false)")
 	SSHProxyAgentCommand.Flags().BoolVar(&shell.GenerateKey, "generate-key", false, "generate RSA key pair (default: false)")
 	SSHProxyAgentCommand.Flags().StringVarP(&username, "username", "u", os.Getenv("USER"), "username for key signing")
 	SSHProxyAgentCommand.Flags().StringVar(&shell.VaultSigningUrl, "vault-signing-url", "", "HashiCorp Vault url to sign SSH keys")
