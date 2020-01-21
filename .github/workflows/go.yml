@@ -11,16 +11,6 @@ jobs:
     - name: Run linter
       uses: miquella/go-actions/fmt@master
 
-  gosec:
-    name: gosec
-    runs-on: ubuntu-latest
-    steps:
-    - name: Check out code
-      uses: actions/checkout@v1
-
-    - name: Run linter
-      uses: miquella/go-actions/sec@master
-
   govet:
     name: go vet
     runs-on: ubuntu-latest
