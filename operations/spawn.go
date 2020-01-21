@@ -50,11 +50,13 @@ func (s *Spawn) Run() error {
 	}
 	vars["SSH_AUTH_SOCK"] = proxyAgent.Socket
 	defer func() {
-		proxyAgent.Keyring.Close()
+		// TODO: look at logging here
+		_ = proxyAgent.Keyring.Close()
 	}()
 
 	if s.GenerateKey {
-		addedKey, err := s.generateKey()
+		var addedKey *agent.AddedKey
+		addedKey, err = s.generateKey()
 		if err != nil {
 			return err
 		}
@@ -119,7 +121,10 @@ func (s *Spawn) startProxyKeyring() (*ProxyAgent, error) {
 		return nil, err
 	}
 
-	go keyring.Serve()
+	go func() {
+		// TODO: look at logging here
+		_ = keyring.Serve()
+	}()
 
 	return &ProxyAgent{
 		Keyring: keyring,

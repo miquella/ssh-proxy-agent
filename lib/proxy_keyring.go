@@ -91,7 +91,10 @@ func (pk *ProxyKeyring) Serve() error {
 			return err
 		}
 
-		go agent.ServeAgent(pk, c)
+		go func() {
+			// TODO: look at logging here
+			_ = agent.ServeAgent(pk, c)
+		}()
 	}
 }
 
