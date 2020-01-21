@@ -67,7 +67,7 @@ key to seed the agent that can be signed on creation.
 
 ```console
 $ ssh-proxy-agent --shell --vault-signing-url https://vault.address.com/key/signing/path
---generate key
+--generate-key
 ```
 
 ## More Details
