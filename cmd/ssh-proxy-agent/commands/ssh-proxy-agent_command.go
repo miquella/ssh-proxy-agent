@@ -17,7 +17,7 @@ var SSHProxyAgentCommand = &cobra.Command{
 	RunE:         shellRunE,
 	SilenceUsage: true,
 
-	Version: "0.1.unstable",
+	Version: "0.2.unstable",
 }
 
 var interactive bool
