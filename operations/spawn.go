@@ -7,6 +7,7 @@ import (
 	"crypto/x509"
 	"encoding/pem"
 	"fmt"
+	"net/url"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -96,6 +97,18 @@ func (s *Spawn) startProxyKeyring() (*ProxyAgent, error) {
 	if !s.NoProxy {
 		upstream_auth_sock = os.Getenv("SSH_AUTH_SOCK")
 	}
+
+	if s.VaultSigningUrl != "" {
+		if vaultAddr := os.Getenv("VAULT_ADDR"); vaultAddr != "" {
+			vaultURL, vaultURLErr := url.Parse(vaultAddr)
+			signingURL, signingURLErr := url.Parse(s.VaultSigningUrl)
+
+			if vaultURLErr == nil && signingURLErr == nil {
+				s.VaultSigningUrl = vaultURL.ResolveReference(signingURL).String()
+			}
+		}
+	}
+
 	keyring, err := proxyagent.NewProxyKeyring(upstream_auth_sock, s.VaultSigningUrl, s.ValidPrincipals)
 	if err != nil {
 		return nil, err
