@@ -26,6 +26,7 @@ type signedKey struct {
 }
 
 type signingKeyring struct {
+	exitChannel      chan chan bool
 	expirationTimer  *time.Timer
 	keys             []signedKey
 	locked           bool
@@ -51,6 +52,7 @@ func NewSigningKeyring(vaultSigningUrl string, username string) (agent.ExtendedA
 	}
 
 	signingKeyring := &signingKeyring{
+		exitChannel:      make(chan chan bool),
 		expirationTimer:  time.NewTimer(0),
 		signingTimer:     time.NewTimer(0),
 		username:         username,
@@ -61,6 +63,14 @@ func NewSigningKeyring(vaultSigningUrl string, username string) (agent.ExtendedA
 	go handleExpirationTimers(signingKeyring)
 
 	return signingKeyring, nil
+}
+
+func (k *signingKeyring) Close() {
+	ackChannel := make(chan bool)
+	k.exitChannel <- ackChannel
+
+	// wait for close to complete before ending
+	<-ackChannel
 }
 
 // expireKeysLocked removes expired keys from the keyring. If a key was added
@@ -88,7 +98,6 @@ func (k *signingKeyring) removeLocked(want []byte) error {
 			}
 
 			return nil
-			// TODO: do we need to look through all for duplicates?
 		} else {
 			i++
 		}
@@ -122,7 +131,6 @@ func (k *signingKeyring) List() ([]*agent.Key, error) {
 // is given, that certificate is added as public key. Note that
 // any constraints given are ignored.
 func (k *signingKeyring) Add(key agent.AddedKey) error {
-	// TODO: look at making these locks more precise (lock isn't needed until end, RLock earlier?)
 	k.mu.Lock()
 	defer k.mu.Unlock()
 
@@ -353,7 +361,6 @@ func (k *signingKeyring) Extension(extensionType string, contents []byte) ([]byt
 // handleRenewalTimer runs as a goroutine to monitor the channels related to key expiration
 // and removal and signing expiration and renewal
 func handleExpirationTimers(keyring *signingKeyring) {
-	// TODO: implement an exit channel to avoid orphaning this routine
 	for {
 		// stop timers if there are no keys or the keyring is locked
 		if keyring.locked || len(keyring.keys) == 0 {
@@ -386,6 +393,9 @@ func handleExpirationTimers(keyring *signingKeyring) {
 
 				keyring.renewTimers()
 			}()
+		case resp := <-keyring.exitChannel:
+			resp <- true
+			break
 		}
 	}
 }

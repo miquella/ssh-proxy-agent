@@ -9,7 +9,9 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"os/signal"
 	"strings"
+	"syscall"
 
 	"golang.org/x/crypto/ssh"
 	"golang.org/x/crypto/ssh/agent"
@@ -37,14 +39,17 @@ type KeyPair struct {
 }
 
 func (s *Spawn) Run() error {
-	vars := getCurrentEnv()
-
 	fmt.Println("Starting the SSH proxy agent...")
+
+	vars := getCurrentEnv()
 	proxyAgent, err := s.startProxyKeyring()
 	if err != nil {
 		return err
 	}
 	vars["SSH_AUTH_SOCK"] = proxyAgent.Socket
+	defer func() {
+		proxyAgent.Keyring.Close()
+	}()
 
 	if s.GenerateKey {
 		addedKey, err := s.generateKey()
@@ -64,7 +69,25 @@ func (s *Spawn) Run() error {
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 
-	return cmd.Run()
+	err = cmd.Start()
+	if err != nil {
+		return err
+	}
+
+	cmdCompletion := make(chan error)
+	go func() {
+		cmdCompletion <- cmd.Wait()
+	}()
+
+	// because we are waiting for our child to exit we can ignore these signals
+	signal.Ignore(syscall.SIGINT, syscall.SIGTERM)
+
+	for {
+		select {
+		case err = <-cmdCompletion:
+			return err
+		}
+	}
 }
 
 func (s *Spawn) startProxyKeyring() (*ProxyAgent, error) {

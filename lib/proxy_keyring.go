@@ -96,6 +96,14 @@ func (pk *ProxyKeyring) Serve() error {
 }
 
 func (pk *ProxyKeyring) Close() error {
+	// call Close() on the keyring if it exists
+	closer, ok := pk.keyring.(interface {
+		Close()
+	})
+	if ok {
+		closer.Close()
+	}
+
 	if pk.listener != nil {
 		return pk.listener.Close()
 	}
