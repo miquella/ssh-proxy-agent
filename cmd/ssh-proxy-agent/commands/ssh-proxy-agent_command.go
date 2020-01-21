@@ -25,7 +25,7 @@ var shell = operations.Spawn{}
 var validPrincipals []string
 
 func init() {
-	SSHProxyAgentCommand.Flags().BoolVarP(&interactive, "", "l", false, "spawn an interactive shell")
+	SSHProxyAgentCommand.Flags().BoolVarP(&interactive, "shell", "l", false, "spawn an interactive shell")
 
 	SSHProxyAgentCommand.Flags().BoolVar(&shell.NoProxy, "no-proxy", false, "disable forwarding to an upstream agent (default: false)")
 	SSHProxyAgentCommand.Flags().BoolVar(&shell.GenerateKey, "generate-key", false, "generate RSA key pair (default: false)")
