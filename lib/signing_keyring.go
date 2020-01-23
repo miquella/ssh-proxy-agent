@@ -468,16 +468,21 @@ func (k *signingKeyring) getKeysToRenew() []signedKey {
 
 // resignKeys takes a list of signed keys and re-signs them with Hashicorp Vault
 func (k *signingKeyring) resignKeys(keysToRenew []signedKey) []signedKey {
-	for i, key := range keysToRenew {
+	resignedKeys := []signedKey{}
+	for _, key := range keysToRenew {
 		signedPublicKey, expiresAt, err := k.signPublicKeyWithVault(key.signer.PublicKey(), key.comment)
 		if err != nil {
 			// TODO: log and skip if we fail to sign
+		} else {
+			resignedKeys = append(resignedKeys, signedKey{
+				comment:         key.comment,
+				signedPublicKey: signedPublicKey,
+				signedUntil:     expiresAt,
+				signer:          key.signer,
+			})
 		}
-		keysToRenew[i].signedPublicKey = signedPublicKey
-		keysToRenew[i].signedUntil = expiresAt
 	}
-
-	return keysToRenew
+	return resignedKeys
 }
 
 // updateKeys takes a list of signed keys and updates all keys in the keychain that match
