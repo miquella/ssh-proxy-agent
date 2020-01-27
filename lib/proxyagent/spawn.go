@@ -1,4 +1,4 @@
-package operations
+package proxyagent
 
 import (
 	"fmt"
@@ -8,7 +8,6 @@ import (
 	"strings"
 	"syscall"
 
-	proxyagent "github.com/miquella/ssh-proxy-agent/lib"
 	"golang.org/x/crypto/ssh/agent"
 )
 
@@ -19,7 +18,7 @@ type Spawn struct {
 }
 
 func (s *Spawn) Run() error {
-	server := proxyagent.NewServer(s.Agent)
+	server := NewServer(s.Agent)
 	err := server.Start()
 	if err != nil {
 		return err

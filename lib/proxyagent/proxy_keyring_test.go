@@ -5,7 +5,7 @@ import (
 
 	"golang.org/x/crypto/ssh/agent"
 
-	"github.com/miquella/ssh-proxy-agent/lib"
+	"github.com/miquella/ssh-proxy-agent/lib/proxyagent"
 )
 
 func TestProxyKeyring(t *testing.T) {

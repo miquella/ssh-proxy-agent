@@ -1,4 +1,4 @@
-package commands
+package main
 
 import (
 	"bytes"
@@ -16,8 +16,7 @@ import (
 	"golang.org/x/crypto/ssh"
 	"golang.org/x/crypto/ssh/agent"
 
-	proxyagent "github.com/miquella/ssh-proxy-agent/lib"
-	"github.com/miquella/ssh-proxy-agent/operations"
+	"github.com/miquella/ssh-proxy-agent/lib/proxyagent"
 )
 
 // SSHProxyAgentCommand is the root command for the `ssh-proxy-agent` entrypoint
@@ -38,7 +37,7 @@ var noProxy bool
 var validPrincipals []string
 var vaultSigningUrl string
 
-var shell = operations.Spawn{}
+var shell = proxyagent.Spawn{}
 
 func init() {
 	SSHProxyAgentCommand.Flags().BoolVarP(&interactive, "shell", "l", false, "spawn an interactive shell")
