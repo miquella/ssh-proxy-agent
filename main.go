@@ -5,7 +5,7 @@ import (
 )
 
 func main() {
-	if err := SSHProxyAgentCommand.Execute(); err != nil {
+	if err := RootCLI.Execute(); err != nil {
 		os.Exit(1)
 	}
 }

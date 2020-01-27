@@ -19,8 +19,8 @@ import (
 	"github.com/miquella/ssh-proxy-agent/lib/proxyagent"
 )
 
-// SSHProxyAgentCommand is the root command for the `ssh-proxy-agent` entrypoint
-var SSHProxyAgentCommand = &cobra.Command{
+// RootCLI is the root command for the `ssh-proxy-agent` entrypoint
+var RootCLI = &cobra.Command{
 	Use:   "ssh-proxy-agent",
 	Short: "SSH-Proxy-Agent creates an ssh-agent proxy",
 
@@ -40,12 +40,12 @@ var vaultSigningUrl string
 var shell = proxyagent.Spawn{}
 
 func init() {
-	SSHProxyAgentCommand.Flags().BoolVarP(&interactive, "shell", "l", false, "spawn an interactive shell")
+	RootCLI.Flags().BoolVarP(&interactive, "shell", "l", false, "spawn an interactive shell")
 
-	SSHProxyAgentCommand.Flags().BoolVar(&generateKey, "generate-key", false, "generate RSA key pair (default: false)")
-	SSHProxyAgentCommand.Flags().BoolVar(&noProxy, "no-proxy", false, "disable forwarding to an upstream agent (default: false)")
-	SSHProxyAgentCommand.Flags().StringSliceVar(&validPrincipals, "valid-principals", []string{os.Getenv("USER")}, "valid principals for Vault key signing")
-	SSHProxyAgentCommand.Flags().StringVar(&vaultSigningUrl, "vault-signing-url", "", "HashiCorp Vault url to sign SSH keys")
+	RootCLI.Flags().BoolVar(&generateKey, "generate-key", false, "generate RSA key pair (default: false)")
+	RootCLI.Flags().BoolVar(&noProxy, "no-proxy", false, "disable forwarding to an upstream agent (default: false)")
+	RootCLI.Flags().StringSliceVar(&validPrincipals, "valid-principals", []string{os.Getenv("USER")}, "valid principals for Vault key signing")
+	RootCLI.Flags().StringVar(&vaultSigningUrl, "vault-signing-url", "", "HashiCorp Vault url to sign SSH keys")
 }
 
 func shellRunE(cmd *cobra.Command, args []string) error {
