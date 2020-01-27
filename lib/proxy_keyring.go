@@ -1,12 +1,7 @@
 package proxyagent
 
 import (
-	"errors"
-	"io/ioutil"
 	"log"
-	"net"
-	"os"
-	"path/filepath"
 
 	"golang.org/x/crypto/ssh"
 	"golang.org/x/crypto/ssh/agent"
@@ -15,103 +10,23 @@ import (
 type ProxyKeyring struct {
 	keyring  agent.ExtendedAgent
 	upstream agent.ExtendedAgent
-
-	listener net.Listener
 }
 
-func NewProxyKeyring(upstreamAuthSock string, vaultSigningUrl string, validPrincipals string) (*ProxyKeyring, error) {
-	var err error
-	var conn net.Conn
-	var upstream agent.ExtendedAgent
-
-	if upstreamAuthSock != "" {
-		conn, err = net.Dial("unix", upstreamAuthSock)
-		if err != nil {
-			return nil, err
-		}
-
-		upstream = agent.NewClient(conn)
-	}
-
-	if vaultSigningUrl != "" {
-		signingKeyring, err := NewSigningKeyring(vaultSigningUrl, validPrincipals)
-		if err != nil {
-			return nil, err
-		}
-
-		return &ProxyKeyring{
-			upstream: upstream,
-			keyring:  signingKeyring,
-		}, nil
-	} else {
-		return &ProxyKeyring{
-			upstream: upstream,
-			keyring:  agent.NewKeyring().(agent.ExtendedAgent),
-		}, nil
+func NewProxyKeyring(keyring agent.Agent, upstream agent.ExtendedAgent) *ProxyKeyring {
+	return &ProxyKeyring{
+		keyring:  keyring.(agent.ExtendedAgent),
+		upstream: upstream,
 	}
 }
 
-func (pk *ProxyKeyring) Listen() (string, error) {
-	if pk.listener != nil {
-		return "", errors.New("Already listening")
-	}
-
-	dir, err := ioutil.TempDir("", "proxykeyring")
-	if err != nil {
-		return "", err
-	}
-
-	err = os.Chmod(dir, 0700)
-	if err != nil {
-		return "", err
-	}
-
-	listener := filepath.Join(dir, "listener")
-	pk.listener, err = net.Listen("unix", listener)
-	if err != nil {
-		return "", err
-	}
-
-	err = os.Chmod(listener, 0600)
-	if err != nil {
-		return "", err
-	}
-
-	return listener, nil
-}
-
-func (pk *ProxyKeyring) Serve() error {
-	if pk.listener == nil {
-		return errors.New("Not listening")
-	}
-
-	for {
-		c, err := pk.listener.Accept()
-		if err != nil {
-			return err
-		}
-
-		go func() {
-			// TODO: look at logging here
-			_ = agent.ServeAgent(pk, c)
-		}()
-	}
-}
-
-func (pk *ProxyKeyring) Close() error {
-	// call Close() on the keyring if it exists
+// TODO: should we consider closing upstream here as well?
+func (pk *ProxyKeyring) Close() {
 	closer, ok := pk.keyring.(interface {
 		Close()
 	})
 	if ok {
 		closer.Close()
 	}
-
-	if pk.listener != nil {
-		return pk.listener.Close()
-	}
-
-	return nil
 }
 
 func (pk *ProxyKeyring) List() ([]*agent.Key, error) {

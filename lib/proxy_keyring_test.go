@@ -9,12 +9,13 @@ import (
 )
 
 func TestProxyKeyring(t *testing.T) {
-	keyring, err := proxyagent.NewProxyKeyring("", "", "")
-	if err != nil {
-		t.Fatalf("Failed to instantiate ProxyKeyring: %v", err)
+	keyring := agent.NewKeyring()
+	proxyKeyring := proxyagent.NewProxyKeyring(keyring, nil)
+	if proxyKeyring == nil {
+		t.Fatalf("Failed to instantiate ProxyKeyring")
 	}
 
-	var ikeyring interface{} = keyring
+	var ikeyring interface{} = proxyKeyring
 	if _, ok := ikeyring.(agent.Agent); !ok {
 		t.Errorf("ProxyKeyring doesn't comply with agent.Agent interface")
 	}
