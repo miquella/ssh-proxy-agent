@@ -12,9 +12,9 @@ type ProxyKeyring struct {
 	upstream agent.ExtendedAgent
 }
 
-func NewProxyKeyring(keyring agent.Agent, upstream agent.ExtendedAgent) *ProxyKeyring {
+func NewProxyKeyring(keyring agent.ExtendedAgent, upstream agent.ExtendedAgent) *ProxyKeyring {
 	return &ProxyKeyring{
-		keyring:  keyring.(agent.ExtendedAgent),
+		keyring:  keyring,
 		upstream: upstream,
 	}
 }

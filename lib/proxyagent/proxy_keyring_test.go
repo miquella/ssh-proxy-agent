@@ -9,7 +9,7 @@ import (
 )
 
 func TestProxyKeyring(t *testing.T) {
-	keyring := agent.NewKeyring()
+	keyring := agent.NewKeyring().(agent.ExtendedAgent)
 	proxyKeyring := proxyagent.NewProxyKeyring(keyring, nil)
 	if proxyKeyring == nil {
 		t.Fatalf("Failed to instantiate ProxyKeyring")

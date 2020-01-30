@@ -24,13 +24,16 @@ type AgentConfig struct {
 }
 
 func SetupAgent(config AgentConfig) (agent.Agent, error) {
-	var sshAgent agent.Agent
+	var sshAgent agent.ExtendedAgent
 	var err error
 
 	if config.VaultSigningUrl != "" {
 		sshAgent, err = setupSigningAgent(config.VaultSigningUrl, config.ValidPrincipals)
+		if err != nil {
+			return nil, err
+		}
 	} else {
-		sshAgent = agent.NewKeyring()
+		sshAgent = agent.NewKeyring().(agent.ExtendedAgent)
 	}
 
 	upstreamAuthSock := os.Getenv("SSH_AUTH_SOCK")
@@ -54,7 +57,7 @@ func SetupAgent(config AgentConfig) (agent.Agent, error) {
 	return sshAgent, nil
 }
 
-func setupSigningAgent(vaultSigningUrl string, validPrincipals []string) (agent.Agent, error) {
+func setupSigningAgent(vaultSigningUrl string, validPrincipals []string) (agent.ExtendedAgent, error) {
 	if vaultAddr := os.Getenv("VAULT_ADDR"); vaultAddr != "" {
 		vaultURL, vaultURLErr := url.Parse(vaultAddr)
 		signingURL, signingURLErr := url.Parse(vaultSigningUrl)
