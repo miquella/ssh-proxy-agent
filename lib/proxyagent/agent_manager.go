@@ -10,6 +10,7 @@ import (
 	"net"
 	"net/url"
 	"os"
+	"os/user"
 	"strings"
 
 	"golang.org/x/crypto/ssh"
@@ -21,6 +22,15 @@ type AgentConfig struct {
 	GenerateRSAKey  bool
 	ValidPrincipals []string
 	VaultSigningUrl string
+}
+
+// DefaultPrincipal returns the username of the user that invoked the calling process
+func DefaultPrincipal() []string {
+	currentUser, err := user.Current()
+	if err != nil {
+		return []string{os.Getenv("USER")}
+	}
+	return []string{currentUser.Username}
 }
 
 func SetupAgent(config AgentConfig) (agent.Agent, error) {
