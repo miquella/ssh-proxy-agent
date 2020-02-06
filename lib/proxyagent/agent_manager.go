@@ -67,6 +67,11 @@ func setupSigningAgent(vaultSigningUrl string, validPrincipals []string) (agent.
 		}
 	}
 
+	parsedUrl, _ := url.Parse(vaultSigningUrl)
+	if parsedUrl.Scheme == "" || parsedUrl.Host == "" || parsedUrl.Path == "" {
+		return nil, fmt.Errorf("Error: Invalid HashiCorp Vault signing URL: '%s'", vaultSigningUrl)
+	}
+
 	validPrincipalsString := strings.Join(validPrincipals, ",")
 	return NewSigningKeyring(vaultSigningUrl, validPrincipalsString)
 }
