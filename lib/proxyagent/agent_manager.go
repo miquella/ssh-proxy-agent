@@ -77,13 +77,14 @@ func setupSigningAgent(vaultSigningUrl string, validPrincipals []string) (agent.
 }
 
 type KeyPair struct {
+	Comment    string
 	PrivateKey string
 	PublicKey  string
 }
 
 func generateAndAddKey(keyring agent.Agent) error {
 	fmt.Println("Generating an RSA key...")
-	keyPair, err := generateRSAKeyPair()
+	keyPair, err := GenerateRSAKeyPair()
 	if err != nil {
 		return err
 	}
@@ -95,11 +96,11 @@ func generateAndAddKey(keyring agent.Agent) error {
 
 	return keyring.Add(agent.AddedKey{
 		PrivateKey: parsedKey,
-		Comment:    "ssh-proxy-agent-generated-key",
+		Comment:    keyPair.Comment,
 	})
 }
 
-func generateRSAKeyPair() (*KeyPair, error) {
+func GenerateRSAKeyPair() (*KeyPair, error) {
 	key, err := rsa.GenerateKey(rand.Reader, 4096)
 	if err != nil {
 		return nil, err
@@ -117,6 +118,7 @@ func generateRSAKeyPair() (*KeyPair, error) {
 	}
 
 	return &KeyPair{
+		Comment:    "ssh-proxy-agent-generated-key",
 		PrivateKey: string(private.Bytes()),
 		PublicKey:  string(ssh.MarshalAuthorizedKey(pubkey)),
 	}, nil
