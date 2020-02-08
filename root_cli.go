@@ -16,7 +16,7 @@ var RootCLI = &cobra.Command{
 	RunE:         shellRunE,
 	SilenceUsage: true,
 
-	Version: "0.2.unstable",
+	Version: "0.2.0",
 }
 
 var interactive bool
