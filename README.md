@@ -18,7 +18,7 @@ generation.
 As long as you have a proper Go environment set up you should be able to install using `go get`:
 
 ```console
-go get -u github.com/miquella/ssh-proxy-agent/cmd/...
+go get -u github.com/miquella/ssh-proxy-agent
 ```
 
 ## Getting Started
