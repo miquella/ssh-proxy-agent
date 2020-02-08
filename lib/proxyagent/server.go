@@ -91,6 +91,11 @@ func (s *Server) serve() error {
 		}
 
 		go func() {
+			defer func() {
+				// TODO: look at logging here
+				_ = c.Close()
+			}()
+
 			// TODO: look at logging here
 			_ = agent.ServeAgent(s.Agent, c)
 		}()
