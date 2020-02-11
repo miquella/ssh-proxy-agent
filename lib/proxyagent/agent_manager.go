@@ -25,12 +25,12 @@ type AgentConfig struct {
 }
 
 // DefaultPrincipal returns the username of the user that invoked the calling process
-func DefaultPrincipal() []string {
+func DefaultPrincipal() string {
 	currentUser, err := user.Current()
 	if err != nil {
-		return []string{os.Getenv("USER")}
+		return os.Getenv("USER")
 	}
-	return []string{currentUser.Username}
+	return currentUser.Username
 }
 
 func SetupAgent(config AgentConfig) (agent.Agent, error) {
