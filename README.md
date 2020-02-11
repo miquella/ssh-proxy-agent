@@ -18,7 +18,7 @@ generation.
 As long as you have a proper Go environment set up you should be able to install using `go get`:
 
 ```console
-go get -u github.com/miquella/ssh-proxy-agent
+$ go get -u github.com/miquella/ssh-proxy-agent
 ```
 
 ## Getting Started
@@ -70,8 +70,7 @@ This is particularly useful when combined with `--generate-key` which will gener
 key to seed the agent that can be signed on creation.
 
 ```console
-$ ssh-proxy-agent --shell --vault-signing-url https://vault.address.com/key/signing/path
---generate-key
+$ ssh-proxy-agent --shell --vault-signing-url https://vault.address.com/key/signing/path --generate-key
 ```
 
 ## More Details
