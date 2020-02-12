@@ -121,9 +121,14 @@ func (k *signingKeyring) List() ([]*agent.Key, error) {
 
 	var ids []*agent.Key
 	for _, key := range k.keys {
+		comment := key.comment
+		if time.Now().After(key.signedUntil) {
+			comment = "[EXPIRED] " + key.comment
+		}
+
 		ids = append(ids, &agent.Key{
 			Blob:    key.signedPublicKey.Marshal(),
-			Comment: key.comment,
+			Comment: comment,
 			Format:  key.signedPublicKey.Type(),
 		})
 	}
