@@ -496,7 +496,7 @@ func (k *signingKeyring) resignKeys(keysToRenew []signedKey) []signedKey {
 func (k *signingKeyring) updateKeys(newKeys []signedKey) {
 	for _, newKey := range newKeys {
 		for i, currentKey := range k.keys {
-			if currentKey.signer.PublicKey() == newKey.signer.PublicKey() {
+			if bytes.Equal(currentKey.signer.PublicKey().Marshal(), newKey.signer.PublicKey().Marshal()) {
 				k.keys[i].signedPublicKey = newKey.signedPublicKey
 				k.keys[i].signedUntil = newKey.signedUntil
 				break
