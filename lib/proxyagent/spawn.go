@@ -30,6 +30,8 @@ func (s *Spawn) Run() error {
 
 	vars := getCurrentEnv()
 	vars["SSH_AUTH_SOCK"] = server.Socket
+	// this is only used to verify if the agent is configured correctly
+	vars["SSH_PROXY_AUTH_SOCK"] = server.Socket
 
 	cmd := exec.Command(s.Command[0], s.Command[1:]...)
 	cmd.Env = buildEnviron(vars)

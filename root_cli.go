@@ -19,6 +19,7 @@ var RootCLI = &cobra.Command{
 	Version: "0.4.unstable",
 }
 
+var doctor bool
 var interactive bool
 
 var agentConfig = proxyagent.AgentConfig{}
@@ -26,6 +27,7 @@ var shell = proxyagent.Spawn{}
 
 func init() {
 	RootCLI.Flags().BoolVarP(&interactive, "shell", "l", false, "spawn an interactive shell")
+	RootCLI.Flags().BoolVarP(&doctor, "doctor", "", false, "verify if a spawned session is running correctly")
 
 	RootCLI.Flags().BoolVar(&agentConfig.GenerateRSAKey, "generate-key", false, "generate RSA key pair (default: false)")
 	RootCLI.Flags().BoolVar(&agentConfig.DisableProxy, "no-proxy", false, "disable forwarding to an upstream agent (default: false)")
@@ -34,6 +36,11 @@ func init() {
 }
 
 func shellRunE(cmd *cobra.Command, args []string) error {
+	if doctor {
+		proxyagent.Doctor()
+		return nil
+	}
+
 	if !interactive {
 		return cmd.Usage()
 	}

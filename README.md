@@ -38,7 +38,13 @@ is active.
 
 Take note that because `ssh-proxy-agent` uses the `SSH_AUTH_SOCK` env var to configure the new
 agent, you will need to ensure this variable does not get overrode when opening a new shell
-(e.g. through a .bashrc or similar file).
+(e.g. through a .bashrc or similar file). If you experience problems, you may want to try
+running with the `--doctor` flag inside of a shell to verify if you are configured to talk to
+the proxy agent correctly:
+
+```console
+$ ssh-proxy-agent --doctor
+```
 
 If you wish to run the proxy agent more securely, you can disable proxying to an upstream agent
 via:
