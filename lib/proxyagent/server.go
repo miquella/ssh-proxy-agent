@@ -54,6 +54,13 @@ func (s *Server) Stop() error {
 	return nil
 }
 
+func (s *Server) GetProxyEnvVars() map[string]string {
+	return map[string]string{
+		"SSH_AUTH_SOCK":       s.Socket,
+		"SSH_PROXY_AUTH_SOCK": s.Socket,
+	}
+}
+
 func (s *Server) listen() error {
 	if s.listener != nil {
 		return errors.New("Already listening")
