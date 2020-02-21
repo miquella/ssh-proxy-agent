@@ -358,6 +358,13 @@ func configureVaultClient(signingHost string) (*vault.Client, error) {
 	}
 
 	vc.SetToken(token)
+
+	// confirm that the configured token is valid
+	_, err = vc.Auth().Token().LookupSelf()
+	if err != nil {
+		return nil, fmt.Errorf("Invalid HashiCorp Vault token detected. You may need to run 'vault login' to renew your token.")
+	}
+
 	return vc, nil
 }
 
