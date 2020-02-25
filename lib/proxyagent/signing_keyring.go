@@ -28,6 +28,7 @@ type signedKey struct {
 type signingKeyring struct {
 	exitChannel      chan chan bool
 	expirationTimer  *time.Timer
+	exposeUnsigned   bool
 	keys             []signedKey
 	locked           bool
 	mu               sync.RWMutex
@@ -40,7 +41,7 @@ type signingKeyring struct {
 
 var errLocked = errors.New("agent: locked")
 
-func NewSigningKeyring(vaultSigningUrl string, username string) (agent.ExtendedAgent, error) {
+func NewSigningKeyring(vaultSigningUrl string, username string, exposeUnsigned bool) (agent.ExtendedAgent, error) {
 	host, path, err := parseVaultSigningUrl(vaultSigningUrl)
 	if err != nil {
 		return nil, err
@@ -54,6 +55,7 @@ func NewSigningKeyring(vaultSigningUrl string, username string) (agent.ExtendedA
 	signingKeyring := &signingKeyring{
 		exitChannel:      make(chan chan bool),
 		expirationTimer:  time.NewTimer(0),
+		exposeUnsigned:   exposeUnsigned,
 		signingTimer:     time.NewTimer(0),
 		username:         username,
 		vaultClient:      vc,
@@ -120,6 +122,8 @@ func (k *signingKeyring) List() ([]*agent.Key, error) {
 	}
 
 	var ids []*agent.Key
+
+	// add signed keys
 	for _, key := range k.keys {
 		comment := key.comment
 		if time.Now().After(key.signedUntil) {
@@ -132,6 +136,18 @@ func (k *signingKeyring) List() ([]*agent.Key, error) {
 			Format:  key.signedPublicKey.Type(),
 		})
 	}
+
+	if k.exposeUnsigned {
+		// add unsigned keys
+		for _, key := range k.keys {
+			ids = append(ids, &agent.Key{
+				Blob:    key.signer.PublicKey().Marshal(),
+				Comment: key.comment,
+				Format:  key.signer.PublicKey().Type(),
+			})
+		}
+	}
+
 	return ids, nil
 }
 

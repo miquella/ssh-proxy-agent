@@ -31,6 +31,7 @@ func init() {
 
 	RootCLI.Flags().BoolVar(&agentConfig.GenerateRSAKey, "generate-key", false, "generate RSA key pair (default: false)")
 	RootCLI.Flags().BoolVar(&agentConfig.DisableProxy, "no-proxy", false, "disable forwarding to an upstream agent (default: false)")
+	RootCLI.Flags().BoolVar(&agentConfig.ExposeUnsigned, "expose-unsigned", false, "expose both signed and unsigned versions of keys when signing is enabled (default: false)")
 	RootCLI.Flags().StringSliceVar(&agentConfig.ValidPrincipals, "valid-principals", []string{proxyagent.DefaultPrincipal()}, "valid principals for Vault key signing")
 	RootCLI.Flags().StringVar(&agentConfig.VaultSigningUrl, "vault-signing-url", "", "HashiCorp Vault url to sign SSH keys")
 }

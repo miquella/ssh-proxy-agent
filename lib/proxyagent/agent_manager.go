@@ -19,6 +19,7 @@ import (
 
 type AgentConfig struct {
 	DisableProxy    bool
+	ExposeUnsigned  bool
 	GenerateRSAKey  bool
 	ValidPrincipals []string
 	VaultSigningUrl string
@@ -38,7 +39,7 @@ func SetupAgent(config AgentConfig) (agent.Agent, error) {
 	var err error
 
 	if config.VaultSigningUrl != "" {
-		sshAgent, err = setupSigningAgent(config.VaultSigningUrl, config.ValidPrincipals)
+		sshAgent, err = setupSigningAgent(config.VaultSigningUrl, config.ValidPrincipals, config.ExposeUnsigned)
 		if err != nil {
 			return nil, err
 		}
@@ -67,7 +68,7 @@ func SetupAgent(config AgentConfig) (agent.Agent, error) {
 	return sshAgent, nil
 }
 
-func setupSigningAgent(vaultSigningUrl string, validPrincipals []string) (agent.ExtendedAgent, error) {
+func setupSigningAgent(vaultSigningUrl string, validPrincipals []string, exposeUnsigned bool) (agent.ExtendedAgent, error) {
 	if vaultAddr := os.Getenv("VAULT_ADDR"); vaultAddr != "" {
 		vaultURL, vaultURLErr := url.Parse(vaultAddr)
 		signingURL, signingURLErr := url.Parse(vaultSigningUrl)
@@ -83,7 +84,7 @@ func setupSigningAgent(vaultSigningUrl string, validPrincipals []string) (agent.
 	}
 
 	validPrincipalsString := strings.Join(validPrincipals, ",")
-	return NewSigningKeyring(vaultSigningUrl, validPrincipalsString)
+	return NewSigningKeyring(vaultSigningUrl, validPrincipalsString, exposeUnsigned)
 }
 
 type KeyPair struct {
