@@ -280,7 +280,13 @@ func (k *signingKeyring) SignWithFlags(pubkey ssh.PublicKey, data []byte, flags 
 
 	wanted := pubkey.Marshal()
 	for _, key := range k.keys {
-		if bytes.Equal(key.signedPublicKey.Marshal(), wanted) {
+		found := bytes.Equal(key.signedPublicKey.Marshal(), wanted)
+		// check the unsigned key as well, if enabled
+		if k.exposeUnsigned {
+			found = found || bytes.Equal(key.signer.PublicKey().Marshal(), wanted)
+		}
+
+		if found {
 			if flags == 0 {
 				return key.signer.Sign(rand.Reader, data)
 			} else {
