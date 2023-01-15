@@ -2,7 +2,6 @@ package proxyagent
 
 import (
 	"errors"
-	"io/ioutil"
 	"net"
 	"os"
 	"path/filepath"
@@ -66,7 +65,7 @@ func (s *Server) listen() error {
 		return errors.New("Already listening")
 	}
 
-	dir, err := ioutil.TempDir("", "proxykeyring")
+	dir, err := os.MkdirTemp("", "proxykeyring")
 	if err != nil {
 		return err
 	}
