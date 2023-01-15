@@ -130,7 +130,7 @@ func GenerateRSAKeyPair() (*KeyPair, error) {
 
 	return &KeyPair{
 		Comment:    "ssh-proxy-agent-generated-key",
-		PrivateKey: string(private.Bytes()),
+		PrivateKey: private.String(),
 		PublicKey:  string(ssh.MarshalAuthorizedKey(pubkey)),
 	}, nil
 }
