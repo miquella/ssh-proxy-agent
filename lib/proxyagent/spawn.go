@@ -45,20 +45,10 @@ func (s *Spawn) Run() error {
 		return err
 	}
 
-	cmdCompletion := make(chan error)
-	go func() {
-		cmdCompletion <- cmd.Wait()
-	}()
-
 	// because we are waiting for our child to exit we can ignore these signals
 	signal.Ignore(syscall.SIGINT, syscall.SIGTERM)
 
-	for {
-		select {
-		case err = <-cmdCompletion:
-			return err
-		}
-	}
+	return cmd.Wait()
 }
 
 func getCurrentEnv() map[string]string {
