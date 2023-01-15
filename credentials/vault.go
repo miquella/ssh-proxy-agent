@@ -2,7 +2,6 @@ package credentials
 
 import (
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strings"
@@ -24,7 +23,7 @@ func GetVaultToken() (string, error) {
 		return "", fmt.Errorf("No Vault token found. You must set a 'VAULT_TOKEN' env var or create a '.vault-token' file.")
 	}
 
-	if bytes, err := ioutil.ReadFile(tokenFile); err != nil {
+	if bytes, err := os.ReadFile(tokenFile); err != nil {
 		return "", fmt.Errorf("Could not read Vault token")
 	} else {
 		return strings.TrimSpace(string(bytes)), nil
