@@ -81,10 +81,8 @@ func (k *signingKeyring) Close() {
 func (k *signingKeyring) expireKeysLocked() {
 	for _, key := range k.keys {
 		if key.expire != nil && time.Now().After(*key.expire) {
-			err := k.removeLocked(key.signer.PublicKey().Marshal())
-			if err != nil {
-				// TODO: write to log, continue
-			}
+			// TODO: on error: write to log, continue
+			_ = k.removeLocked(key.signer.PublicKey().Marshal())
 		}
 	}
 }
