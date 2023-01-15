@@ -472,8 +472,9 @@ func (k *signingKeyring) renewTimers() {
 	signDuration := time.Until(nextSigningExpiration) - time.Minute*10
 	if signDuration > time.Minute*5 {
 		nextSigningExpiration = time.Now().Add(signDuration)
+	} else {
+		nextSigningExpiration = time.Now().Add(time.Minute * 5)
 	}
-	nextSigningExpiration = time.Now().Add(time.Minute * 5)
 
 	if nextKeyExpiration.IsZero() {
 		k.expirationTimer.Stop()
