@@ -1,7 +1,9 @@
 package main
 
 import (
+	"fmt"
 	"os"
+	"runtime/debug"
 
 	"github.com/spf13/cobra"
 
@@ -13,14 +15,14 @@ var RootCLI = &cobra.Command{
 	Use:   "ssh-proxy-agent",
 	Short: "SSH-Proxy-Agent creates an ssh-agent proxy",
 
+	PreRun:       versionPreRun,
 	RunE:         shellRunE,
 	SilenceUsage: true,
-
-	Version: "0.7.unstable",
 }
 
 var doctor bool
 var interactive bool
+var version bool
 
 var agentConfig = proxyagent.AgentConfig{}
 var shell = proxyagent.Spawn{}
@@ -28,6 +30,7 @@ var shell = proxyagent.Spawn{}
 func init() {
 	RootCLI.Flags().BoolVarP(&interactive, "shell", "l", false, "spawn an interactive shell")
 	RootCLI.Flags().BoolVarP(&doctor, "doctor", "", false, "verify if a spawned session is running correctly")
+	RootCLI.Flags().BoolVar(&version, "version", false, "display version of ssh-proxy-agent")
 
 	RootCLI.Flags().BoolVar(&agentConfig.GenerateRSAKey, "generate-key", false, "generate RSA key pair (default: false)")
 	RootCLI.Flags().BoolVar(&agentConfig.DisableProxy, "no-proxy", false, "disable forwarding to an upstream agent (default: false)")
@@ -63,4 +66,41 @@ func loginShellCommand() []string {
 	}
 
 	return []string{shell, "--login"}
+}
+
+func versionPreRun(*cobra.Command, []string) {
+	if !version {
+		return
+	}
+
+	version := "(devel)"
+	vcsRevision := ""
+	vcsModified := false
+
+	buildInfo, ok := debug.ReadBuildInfo()
+	if ok {
+		version = buildInfo.Main.Version
+
+		for _, buildSetting := range buildInfo.Settings {
+			switch buildSetting.Key {
+			case "vcs.revision":
+				vcsRevision = buildSetting.Value
+			case "vcs.modified":
+				vcsModified = buildSetting.Value == "true"
+			}
+		}
+	}
+
+	fmt.Printf("ssh-proxy-agent %s", version)
+
+	if vcsRevision != "" {
+		fmt.Printf(" (%s", vcsRevision)
+		if vcsModified {
+			fmt.Print("-dirty")
+		}
+		fmt.Print(")")
+	}
+
+	fmt.Println()
+	os.Exit(0)
 }
