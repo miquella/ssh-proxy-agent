@@ -1,59 +1,42 @@
-name: Go
-on: [push, pull_request]
+name: go
+on:
+  pull_request:
+    branches: ['*']
+  push:
+    branches: ['*']
+    tags: ['v*']
+
+permissions:
+  contents: read
+
 jobs:
-  gofmt:
-    name: go fmt
-    runs-on: ubuntu-latest
-    steps:
-    - name: Check out code
-      uses: actions/checkout@v1
-
-    - name: Run linter
-      uses: miquella/go-actions/fmt@master
-
-  govet:
-    name: go vet
-    runs-on: ubuntu-latest
-    steps:
-    - name: Check out code
-      uses: actions/checkout@v1
-
-    - name: Run shadow linter
-      uses: miquella/go-actions/vet@master
-      with:
-        vettool: shadow
-    - name: Run vet linter
-      uses: miquella/go-actions/vet@master
-
-  errcheck:
-    name: errcheck
-    runs-on: ubuntu-latest
-    steps:
-    - name: Check out code
-      uses: actions/checkout@v1
-
-    - name: Run errcheck linter
-      uses: miquella/go-actions/errcheck@master
-
-  test:
-    name: Test
+  golangci-lint:
+    name: golangci-lint
     strategy:
       matrix:
-        go-version: [1.12.x, 1.13.x]
-        os: [ubuntu-latest, macos-latest, windows-latest]
-    runs-on: ${{ matrix.os }}
+        go-version: [stable, oldstable]
 
+    runs-on: ubuntu-latest
     steps:
-    - name: Set up Go
-      uses: actions/setup-go@v1
-      with:
-        go-version: ${{ matrix.go-version }}
+      - uses: actions/checkout@v3
+      - uses: actions/setup-go@v3
+        with:
+          go-version: ${{ matrix.go-version }}
+      - uses: golangci/golangci-lint-action@v3
+        with:
+          version: v1.50
 
-    - name: Check out code
-      uses: actions/checkout@v1
+  go-test:
+    name: go test
+    strategy:
+      matrix:
+        go-version: [stable, oldstable]
+        os: [macos-latest, ubuntu-latest, windows-latest]
 
-    - name: Get dependencies
-      run: go get -v -t -d ./...
-
-    - name: Test
-      run: go test -v ./...
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-go@v3
+        with:
+          go-version: ${{ matrix.go-version }}
+      - run: go test -v ./...
