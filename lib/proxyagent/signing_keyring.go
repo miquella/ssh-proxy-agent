@@ -294,9 +294,9 @@ func (k *signingKeyring) SignWithFlags(pubkey ssh.PublicKey, data []byte, flags 
 					var algorithm string
 					switch flags {
 					case agent.SignatureFlagRsaSha256:
-						algorithm = ssh.SigAlgoRSASHA2256
+						algorithm = ssh.KeyAlgoRSASHA256
 					case agent.SignatureFlagRsaSha512:
-						algorithm = ssh.SigAlgoRSASHA2512
+						algorithm = ssh.KeyAlgoRSASHA512
 					default:
 						return nil, fmt.Errorf("agent: unsupported signature flags: %d", flags)
 					}
